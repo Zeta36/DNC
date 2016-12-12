@@ -143,58 +143,88 @@ class DNC(Chain):
         # any variable else ?
 
 X = 5
-Y = 5
-N = 10
+Y = 1
+N = 50
 W = 10
 R = 2
 mdl = DNC(X, Y, N, W, R)
 opt = optimizers.Adam()
 opt.setup(mdl)
-datanum = 100000
+datanum = 1000
 loss = 0.0
-acc = 0.0
 for datacnt in range(datanum):
+    print 'Step: ', datacnt
     lossfrac = np.zeros((1,2))
-    # x_seq = np.random.rand(X,seqlen).astype(np.float32)
-    # t_seq = np.random.rand(Y,seqlen).astype(np.float32)
-    # t_seq = np.copy(x_seq)
 
-    contentlen = np.random.randint(3,6)
+    contentlen = np.random.randint(3,8)
     content = np.random.randint(0,X-1,contentlen)
-    seqlen = contentlen + contentlen
-    x_seq_list = [float('nan')] * seqlen
-    t_seq_list = [float('nan')] * seqlen    
+    seqlen = contentlen + 1
+    x_seq_list = [float('nan')] * seqlen  
+    sums = 0.0
+    sums_text = ""
     for i in range(seqlen):
         if (i < contentlen):
             x_seq_list[i] = onehot(content[i],X)
+            sums += content[i]
+            sums_text += str(content[i]) + " + "
         elif (i == contentlen):
             x_seq_list[i] = onehot(X-1,X)
         else:
-            x_seq_list[i] = np.zeros(X).astype(np.float32)
-            
-        if (i >= contentlen):
-            t_seq_list[i] = onehot(content[i-contentlen],X)    
+            x_seq_list[i] = np.zeros(X).astype(np.float32) 
     
     mdl.reset_state()
     for cnt in range(seqlen):
         x = Variable(x_seq_list[cnt].reshape(1,X))
-        if (isinstance(t_seq_list[cnt], np.ndarray)):
-            t = Variable(t_seq_list[cnt].reshape(1,Y))
+        if (cnt > contentlen - 1):
+            t = Variable(np.array([sums]).astype(np.float32).reshape(1,Y))
         else:
             t = []
             
         y = mdl(x)
         if (isinstance(t,chainer.Variable)):
             loss += (y - t)**2
-            print y.data, t.data, np.argmax(y.data)==np.argmax(t.data)
-            if (np.argmax(y.data)==np.argmax(t.data)): acc += 1
+            print "Real value: ", sums_text[:-2] + ' = ' + str(int(sums))
+            print "Predicted:  ", sums_text[:-2] + ' = ' + str(int(y.data[0][0]))
         if (cnt+1==seqlen):
             mdl.cleargrads()
             loss.grad = np.ones(loss.data.shape, dtype=np.float32)
             loss.backward()
             opt.update()
             loss.unchain_backward()
-            print '(', datacnt, ')', loss.data.sum()/loss.data.size/contentlen, acc/contentlen
+            print 'Loss:', loss.data.sum()/loss.data.size/contentlen
             lossfrac += [loss.data.sum()/loss.data.size/seqlen, 1.]
             loss = 0.0
-            acc = 0.0
+            
+print "\nTesting the generalization...\n"
+testingnum = 50
+for datacnt in range(testingnum):
+    contentlen = np.random.randint(8,25)
+    content = np.random.randint(0,X-1,contentlen)
+    seqlen = contentlen + 1
+    x_seq_list = [float('nan')] * seqlen  
+    sums = 0.0
+    sums_text = ""
+    for i in range(seqlen):
+        if (i < contentlen):
+            x_seq_list[i] = onehot(content[i],X)
+            sums += content[i]
+            sums_text += str(content[i]) + " + "
+        elif (i == contentlen):
+            x_seq_list[i] = onehot(X-1,X)
+        else:
+            x_seq_list[i] = np.zeros(X).astype(np.float32) 
+    
+    mdl.reset_state()
+    for cnt in range(seqlen):
+        x = Variable(x_seq_list[cnt].reshape(1,X))
+        if (cnt > contentlen - 1):
+            t = Variable(np.array([sums]).astype(np.float32).reshape(1,Y))
+        else:
+            t = []
+            
+        y = mdl(x)
+        if (isinstance(t,chainer.Variable)):
+            loss += (y - t)**2
+            print "Real value: ", sums_text[:-2] + ' = ' + str(int(sums))
+            print "Predicted:  ", sums_text[:-2] + ' = ' + str(int(y.data[0][0]))
+ 

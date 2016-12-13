@@ -142,22 +142,22 @@ class DNC(Chain):
         self.ww = Variable(np.zeros((self.N, 1)).astype(np.float32))
         # any variable else ?
 
-X = 5
+X = 3
 Y = 1
-N = 50
+N = 25
 W = 10
 R = 2
 mdl = DNC(X, Y, N, W, R)
 opt = optimizers.Adam()
 opt.setup(mdl)
-datanum = 1000
+datanum = 500
 loss = 0.0
 for datacnt in range(datanum):
     print 'Step: ', datacnt
-    lossfrac = np.zeros((1,2))
+    lossfrac = np.zeros((1, 2))
 
-    contentlen = np.random.randint(3,8)
-    content = np.random.randint(0,X-1,contentlen)
+    contentlen = np.random.randint(2, 10)
+    content = np.random.randint(0, X-1, contentlen)
     seqlen = contentlen + 1
     x_seq_list = [float('nan')] * seqlen  
     sums = 0.0
@@ -167,8 +167,6 @@ for datacnt in range(datanum):
             x_seq_list[i] = onehot(content[i],X)
             sums += content[i]
             sums_text += str(content[i]) + " + "
-        elif (i == contentlen):
-            x_seq_list[i] = onehot(X-1,X)
         else:
             x_seq_list[i] = np.zeros(X).astype(np.float32) 
     
@@ -184,7 +182,7 @@ for datacnt in range(datanum):
         if (isinstance(t,chainer.Variable)):
             loss += (y - t)**2
             print "Real value: ", sums_text[:-2] + ' = ' + str(int(sums))
-            print "Predicted:  ", sums_text[:-2] + ' = ' + str(int(y.data[0][0]))
+            print "Predicted:  ", sums_text[:-2] + ' = ' + str(int(round(y.data[0][0]))) + " [" + str(y.data[0][0]) + "]"
         if (cnt+1==seqlen):
             mdl.cleargrads()
             loss.grad = np.ones(loss.data.shape, dtype=np.float32)
@@ -198,8 +196,8 @@ for datacnt in range(datanum):
 print "\nTesting the generalization...\n"
 testingnum = 50
 for datacnt in range(testingnum):
-    contentlen = np.random.randint(8,25)
-    content = np.random.randint(0,X-1,contentlen)
+    contentlen = np.random.randint(10, 25)
+    content = np.random.randint(0, X-1, contentlen)
     seqlen = contentlen + 1
     x_seq_list = [float('nan')] * seqlen  
     sums = 0.0
@@ -226,5 +224,5 @@ for datacnt in range(testingnum):
         if (isinstance(t,chainer.Variable)):
             loss += (y - t)**2
             print "Real value: ", sums_text[:-2] + ' = ' + str(int(sums))
-            print "Predicted:  ", sums_text[:-2] + ' = ' + str(int(y.data[0][0]))
+            print "Predicted:  ", sums_text[:-2] + ' = ' + str(int(round(y.data[0][0])))
  

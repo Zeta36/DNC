@@ -207,8 +207,6 @@ for datacnt in range(testingnum):
             x_seq_list[i] = onehot(content[i],X)
             sums += content[i]
             sums_text += str(content[i]) + " + "
-        elif (i == contentlen):
-            x_seq_list[i] = onehot(X-1,X)
         else:
             x_seq_list[i] = np.zeros(X).astype(np.float32) 
     

@@ -1,5 +1,4 @@
 import numpy as np
-import math
 import chainer
 from chainer import functions as F
 from chainer import links as L
@@ -8,46 +7,48 @@ from chainer import \
      Chain, ChainList, Function, Link, Variable
 
 
-def onehot(x,n):
+def onehot(x, n):
     ret = np.zeros(n).astype(np.float32)
     ret[x] = 1.0
     return ret
 
-def overlap(u, v): # u, v: (1 * -) Variable  -> (1 * 1) Variable
+
+# u, v: (1 * -) Variable  -> (1 * 1) Variable
+def overlap(u, v):
     denominator = F.sqrt(F.batch_l2_norm_squared(u) * F.batch_l2_norm_squared(v))
     if (np.array_equal(denominator.data, np.array([0]))):
         return F.matmul(u, F.transpose(v))
-    return F.matmul(u, F.transpose(v)) / F.reshape(denominator,(1,1))
+    return F.matmul(u, F.transpose(v)) / F.reshape(denominator, (1, 1))
 
 
 def C(M, k, beta):
     # (N * W), (1 * W), (1 * 1) -> (N * 1)
     # (not (N * W), ({R,1} * W), (1 * {R,1}) -> (N * {R,1}))
-    W = M.data.shape[1]    
+    W = M.data.shape[1]
     ret_list = [0] * M.data.shape[0]
     for i in range(M.data.shape[0]):
-        ret_list[i] = overlap(F.reshape(M[i,:], (1, W)), k) * beta # pick i-th row
-    return F.transpose(F.softmax(F.transpose(F.concat(ret_list, 0)))) # concat vertically and calc softmax in each column
+        # pick i-th row
+        ret_list[i] = overlap(F.reshape(M[i, :], (1, W)), k) * beta
+    return F.transpose(F.softmax(F.transpose(F.concat(ret_list, 0))))
 
 
-
-def u2a(u): # u, a: (N * 1) Variable
+# u, a: (N * 1) Variable
+def u2a(u):
     N = len(u.data)
-    phi = np.argsort(u.data.reshape(N)) # u.data[phi]: ascending
-    a_list = [0] * N    
-    cumprod = Variable(np.array([[1.0]]).astype(np.float32)) 
+    phi = np.argsort(u.data.reshape(N))
+    a_list = [0] * N
+    cumprod = Variable(np.array([[1.0]]).astype(np.float32))
     for i in range(N):
-        a_list[phi[i]] = cumprod * (1.0 - F.reshape(u[phi[i],0], (1,1)))
-        cumprod *= F.reshape(u[phi[i],0], (1,1))
-    return F.concat(a_list, 0) # concat vertically
+        a_list[phi[i]] = cumprod * (1.0 - F.reshape(u[phi[i], 0], (1, 1)))
+        cumprod *= F.reshape(u[phi[i], 0], (1, 1))
+    return F.concat(a_list, 0)
 
 
-
-class DeepLSTM(Chain): # too simple?
+class DeepLSTM(Chain):
     def __init__(self, d_in, d_out):
         super(DeepLSTM, self).__init__(
-            l1 = L.LSTM(d_in, d_out),
-            l2 = L.Linear(d_out, d_out),)
+              l1 = L.LSTM(d_in, d_out),
+              l2 = L.Linear(d_out, d_out),)
     def __call__(self, x):
         self.x = x
         self.y = self.l2(self.l1(self.x))
@@ -56,7 +57,6 @@ class DeepLSTM(Chain): # too simple?
         self.l1.reset_state()
 
 
-    
 class DNC(Chain):
     def __init__(self, X, Y, N, W, R):
         self.X = X # input dimension
@@ -65,7 +65,7 @@ class DNC(Chain):
         self.W = W # dimension of one memory slot
         self.R = R # number of read heads
         self.controller = DeepLSTM(W*R+X, Y+W*R+3*W+5*R+3)
-        
+
         super(DNC, self).__init__(
             l_dl = self.controller,
             l_Wr = L.Linear(self.R * self.W, self.Y) # nobias=True ? 
@@ -131,26 +131,27 @@ class DNC(Chain):
         
         self.y = self.l_Wr(self.r) + self.nu # 1 * Y
         return self.y
+
+
     def reset_state(self):
         self.l_dl.reset_state()
         self.u = Variable(np.zeros((self.N, 1)).astype(np.float32))
         self.p = Variable(np.zeros((self.N, 1)).astype(np.float32))
-        self.L = Variable(np.zeros((self.N, self.N)).astype(np.float32))                           
+        self.L = Variable(np.zeros((self.N, self.N)).astype(np.float32))
         self.M = Variable(np.zeros((self.N, self.W)).astype(np.float32))
-        self.r = Variable(np.zeros((1, self.R*self.W)).astype(np.float32))
+        self.r = Variable(np.zeros((1, self.R * self.W)).astype(np.float32))
         self.wr = Variable(np.zeros((self.N, self.R)).astype(np.float32))
         self.ww = Variable(np.zeros((self.N, 1)).astype(np.float32))
-        # any variable else ?
 
 X = 3
 Y = 1
-N = 25
+N = 50
 W = 10
 R = 2
 mdl = DNC(X, Y, N, W, R)
 opt = optimizers.Adam()
 opt.setup(mdl)
-datanum = 500
+datanum = 1000
 loss = 0.0
 for datacnt in range(datanum):
     print 'Step: ', datacnt
@@ -169,7 +170,7 @@ for datacnt in range(datanum):
             sums_text += str(content[i]) + " + "
         else:
             x_seq_list[i] = np.zeros(X).astype(np.float32) 
-    
+
     mdl.reset_state()
     for cnt in range(seqlen):
         x = Variable(x_seq_list[cnt].reshape(1,X))
@@ -177,7 +178,7 @@ for datacnt in range(datanum):
             t = Variable(np.array([sums]).astype(np.float32).reshape(1,Y))
         else:
             t = []
-            
+
         y = mdl(x)
         if (isinstance(t,chainer.Variable)):
             loss += (y - t)**2
@@ -192,11 +193,11 @@ for datacnt in range(datanum):
             print 'Loss:', loss.data.sum()/loss.data.size/contentlen
             lossfrac += [loss.data.sum()/loss.data.size/seqlen, 1.]
             loss = 0.0
-            
+
 print "\nTesting the generalization...\n"
 testingnum = 50
 for datacnt in range(testingnum):
-    contentlen = np.random.randint(10, 25)
+    contentlen = np.random.randint(10, 50)
     content = np.random.randint(0, X-1, contentlen)
     seqlen = contentlen + 1
     x_seq_list = [float('nan')] * seqlen  
@@ -209,7 +210,7 @@ for datacnt in range(testingnum):
             sums_text += str(content[i]) + " + "
         else:
             x_seq_list[i] = np.zeros(X).astype(np.float32) 
-    
+
     mdl.reset_state()
     for cnt in range(seqlen):
         x = Variable(x_seq_list[cnt].reshape(1,X))
@@ -217,10 +218,9 @@ for datacnt in range(testingnum):
             t = Variable(np.array([sums]).astype(np.float32).reshape(1,Y))
         else:
             t = []
-            
+
         y = mdl(x)
         if (isinstance(t,chainer.Variable)):
             loss += (y - t)**2
             print "Real value: ", sums_text[:-2] + ' = ' + str(int(sums))
-            print "Predicted:  ", sums_text[:-2] + ' = ' + str(int(round(y.data[0][0])))
- 
+            print "Predicted:  ", sums_text[:-2] + ' = ' + str(int(round(y.data[0][0]))) + " [" + str(y.data[0][0]) + "]"
